@@ -1,3 +1,3 @@
 # Fantasy world visualizer
 
-this little vibecoded program will blah blah blah icba
+Made a little fantasy world visualzer that calculates the water to land ratio and projects your flat 2d maps onto a globe.
