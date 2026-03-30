@@ -3,9 +3,11 @@ import * as THREE from "three";
 
 const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap');`;
 
+const IS_MOBILE = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth < 768;
+
 /* ═══════════════════════════════════════════
-   WATER / LAND ANALYZER
-   ═══════════════════════════════════════════ */
+ *  WATER / LAND ANALYZER
+ *  ═══════════════════════════════════════════ */
 function SurveyPanel({ imgUrl, imgEl }) {
   const [analyzing, setAnalyzing] = useState(false);
   const [results, setResults] = useState(null);
@@ -50,7 +52,7 @@ function SurveyPanel({ imgUrl, imgEl }) {
     requestAnimationFrame(() => {
       const canvas = canvasRef.current;
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      const maxDim = 800;
+      const maxDim = IS_MOBILE ? 400 : 800;
       let w = imgEl.naturalWidth, h = imgEl.naturalHeight;
       if (w > maxDim || h > maxDim) { const s = maxDim / Math.max(w, h); w = Math.round(w * s); h = Math.round(h * s); }
       canvas.width = w; canvas.height = h;
@@ -96,92 +98,92 @@ function SurveyPanel({ imgUrl, imgEl }) {
 
   return (
     <div className="survey-layout">
-      <div className="survey-map-panel">
-        <div className="map-container" onMouseMove={handleMouseMove} onMouseLeave={() => setHoverPixel(null)}>
-          <img src={imgUrl} alt="Map" />
-          {previewMode && overlayData && <canvas ref={overlayCanvasRef} className="overlay-canvas" />}
-          {analyzing && <div className="analyzing-overlay"><div className="spinner" /><div className="analyzing-text">Surveying the realm…</div></div>}
-          {hoverPixel && results && (
-            <div className="pixel-info">
-              <div className="pixel-swatch" style={{ background: `rgb(${hoverPixel.r},${hoverPixel.g},${hoverPixel.b})` }} />
-              <span className={`pixel-type ${hoverPixel.type}`}>{hoverPixel.type}</span>
-              <span style={{ color: "#5a4d36", fontSize: 11 }}>({hoverPixel.x}, {hoverPixel.y})</span>
-            </div>
-          )}
-        </div>
-        {results && <div className="dimension-info">Analyzed at {results.w}×{results.h} — {results.total.toLocaleString()} pixels</div>}
-        <canvas ref={canvasRef} className="hidden-canvas" />
+    <div className="survey-map-panel">
+    <div className="map-container" onMouseMove={handleMouseMove} onMouseLeave={() => setHoverPixel(null)}>
+    <img src={imgUrl} alt="Map" />
+    {previewMode && overlayData && <canvas ref={overlayCanvasRef} className="overlay-canvas" />}
+    {analyzing && <div className="analyzing-overlay"><div className="spinner" /><div className="analyzing-text">Surveying the realm…</div></div>}
+    {hoverPixel && results && (
+      <div className="pixel-info">
+      <div className="pixel-swatch" style={{ background: `rgb(${hoverPixel.r},${hoverPixel.g},${hoverPixel.b})` }} />
+      <span className={`pixel-type ${hoverPixel.type}`}>{hoverPixel.type}</span>
+      <span style={{ color: "#5a4d36", fontSize: 11 }}>({hoverPixel.x}, {hoverPixel.y})</span>
       </div>
+    )}
+    </div>
+    {results && <div className="dimension-info">Analyzed at {results.w}×{results.h} — {results.total.toLocaleString()} pixels</div>}
+    <canvas ref={canvasRef} className="hidden-canvas" />
+    </div>
 
-      <div className="survey-controls">
-        <div className="ctrl-card">
-          <div className="ctrl-label">Water Sensitivity</div>
-          <div className="slider-row">
-            <input type="range" min="10" max="90" value={sensitivity} onChange={(e) => setSensitivity(Number(e.target.value))} />
-            <span className="slider-val">{sensitivity}%</span>
-          </div>
-          <div className="slider-label-row"><span>Strict</span><span>Broad</span></div>
-        </div>
+    <div className="survey-controls">
+    <div className="ctrl-card">
+    <div className="ctrl-label">Water Sensitivity</div>
+    <div className="slider-row">
+    <input type="range" min="10" max="90" value={sensitivity} onChange={(e) => setSensitivity(Number(e.target.value))} />
+    <span className="slider-val">{sensitivity}%</span>
+    </div>
+    <div className="slider-label-row"><span>Strict</span><span>Broad</span></div>
+    </div>
 
-        <button className="btn-action" onClick={analyzeMap} disabled={analyzing}>
-          {analyzing ? "Surveying…" : results ? "Re-Survey" : "Survey Map"}
-        </button>
+    <button className="btn-action" onClick={analyzeMap} disabled={analyzing}>
+    {analyzing ? "Surveying…" : results ? "Re-Survey" : "Survey Map"}
+    </button>
 
-        {results && overlayData && (
-          <button
-            className="btn-secondary"
-            style={{ background: previewMode ? 'rgba(91,164,230,0.15)' : undefined, borderColor: previewMode ? '#5ba4e6' : undefined, color: previewMode ? '#5ba4e6' : undefined }}
-            onClick={() => setPreviewMode(!previewMode)}
-          >
-            {previewMode ? "Hide Overlay" : "Show Classification"}
-          </button>
-        )}
+    {results && overlayData && (
+      <button
+      className="btn-secondary"
+      style={{ background: previewMode ? 'rgba(91,164,230,0.15)' : undefined, borderColor: previewMode ? '#5ba4e6' : undefined, color: previewMode ? '#5ba4e6' : undefined }}
+      onClick={() => setPreviewMode(!previewMode)}
+      >
+      {previewMode ? "Hide Overlay" : "Show Classification"}
+      </button>
+    )}
 
-        {previewMode && (
-          <div className="legend">
-            <div className="legend-item"><div className="legend-dot" style={{ background: "#3a8ae0" }} />Water</div>
-            <div className="legend-item"><div className="legend-dot" style={{ background: "#78b43c" }} />Land</div>
-          </div>
-        )}
-
-        {results && (
-          <div className="ctrl-card">
-            <div className="ctrl-label">Survey Results</div>
-            <div className="results-grid">
-              <div className="result-box">
-                <div className="result-value water">{results.waterPct.toFixed(1)}%</div>
-                <div className="result-label-sm">Water</div>
-              </div>
-              <div className="result-box">
-                <div className="result-value land">{results.landPct.toFixed(1)}%</div>
-                <div className="result-label-sm">Land</div>
-              </div>
-              <div className="result-box full">
-                <div className="result-value ratio">{results.ratio} : 1</div>
-                <div className="result-label-sm">Water to Land</div>
-              </div>
-            </div>
-            <div className="bar-container">
-              <div className="bar-water" style={{ width: `${results.waterPct}%` }}>{results.waterPct > 8 ? `${results.waterPct.toFixed(0)}%` : ""}</div>
-              <div className="bar-land">{results.landPct > 8 ? `${results.landPct.toFixed(0)}%` : ""}</div>
-            </div>
-            <div style={{ textAlign: "center", marginTop: 12, fontSize: 12, color: "#6d6352" }}>
-              {results.waterPct > 70 ? "A realm of vast oceans and scattered isles."
-                : results.waterPct > 50 ? "The seas hold dominion, but land endures."
-                : results.waterPct > 30 ? "A balanced realm of coast and continent."
-                : results.waterPct > 15 ? "Great landmasses stretch between narrow seas."
-                : "An arid world — water is precious here."}
-            </div>
-          </div>
-        )}
+    {previewMode && (
+      <div className="legend">
+      <div className="legend-item"><div className="legend-dot" style={{ background: "#3a8ae0" }} />Water</div>
+      <div className="legend-item"><div className="legend-dot" style={{ background: "#78b43c" }} />Land</div>
       </div>
+    )}
+
+    {results && (
+      <div className="ctrl-card">
+      <div className="ctrl-label">Survey Results</div>
+      <div className="results-grid">
+      <div className="result-box">
+      <div className="result-value water">{results.waterPct.toFixed(1)}%</div>
+      <div className="result-label-sm">Water</div>
+      </div>
+      <div className="result-box">
+      <div className="result-value land">{results.landPct.toFixed(1)}%</div>
+      <div className="result-label-sm">Land</div>
+      </div>
+      <div className="result-box full">
+      <div className="result-value ratio">{results.ratio} : 1</div>
+      <div className="result-label-sm">Water to Land</div>
+      </div>
+      </div>
+      <div className="bar-container">
+      <div className="bar-water" style={{ width: `${results.waterPct}%` }}>{results.waterPct > 8 ? `${results.waterPct.toFixed(0)}%` : ""}</div>
+      <div className="bar-land">{results.landPct > 8 ? `${results.landPct.toFixed(0)}%` : ""}</div>
+      </div>
+      <div style={{ textAlign: "center", marginTop: 12, fontSize: 12, color: "#6d6352" }}>
+      {results.waterPct > 70 ? "A realm of vast oceans and scattered isles."
+        : results.waterPct > 50 ? "The seas hold dominion, but land endures."
+        : results.waterPct > 30 ? "A balanced realm of coast and continent."
+        : results.waterPct > 15 ? "Great landmasses stretch between narrow seas."
+        : "An arid world — water is precious here."}
+        </div>
+        </div>
+    )}
+    </div>
     </div>
   );
 }
 
 /* ═══════════════════════════════════════════
-   3D GLOBE VIEWER
-   ═══════════════════════════════════════════ */
+ *  3D GLOBE VIEWER
+ *  ═══════════════════════════════════════════ */
 function GlobePanel({ imgEl }) {
   const [autoRotate, setAutoRotate] = useState(true);
   const [rotateSpeed, setRotateSpeed] = useState(0.3);
@@ -211,7 +213,7 @@ function GlobePanel({ imgEl }) {
   useEffect(() => { atmosphereRef.current = atmosphere; }, [atmosphere]);
 
   const buildTextureCanvas = useCallback((img, nPad, sPad, hOff, pColor) => {
-    const maxDim = 4096;
+    const maxDim = IS_MOBILE ? 2048 : 4096;
     const texW = Math.min(img.naturalWidth, maxDim);
     const texH = Math.min(Math.round(texW / 2), maxDim);
     const canvas = document.createElement("canvas");
@@ -253,14 +255,14 @@ function GlobePanel({ imgEl }) {
     const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 1000);
     camera.position.z = 2.8;
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(w, h); renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); renderer.setClearColor(0x000000, 0);
+    renderer.setSize(w, h); renderer.setPixelRatio(Math.min(window.devicePixelRatio, IS_MOBILE ? 1.5 : 2)); renderer.setClearColor(0x000000, 0);
     mount.appendChild(renderer.domElement);
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.5));
     const sun = new THREE.DirectionalLight(0xfff4e0, 1.0); sun.position.set(5, 3, 5); scene.add(sun);
     const fill = new THREE.DirectionalLight(0x8ab4f8, 0.25); fill.position.set(-3, -1, -2); scene.add(fill);
 
-    const geo = new THREE.SphereGeometry(1, 128, 96);
+    const geo = new THREE.SphereGeometry(1, IS_MOBILE ? 64 : 128, IS_MOBILE ? 48 : 96);
     const texCanvas = buildTextureCanvas(imgEl, northPad, southPad, hOffset, poleColor);
     const texture = new THREE.CanvasTexture(texCanvas);
     texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
@@ -279,11 +281,12 @@ function GlobePanel({ imgEl }) {
     const gmEquator = new THREE.LineBasicMaterial({ color: 0xe8c44a, transparent: true, opacity: 0.7, depthWrite: false, linewidth: 2 });
     const gmPrime = new THREE.LineBasicMaterial({ color: 0xe85050, transparent: true, opacity: 0.6, depthWrite: false, linewidth: 2 });
     const gr = 1.04;
+    const gridSegs = IS_MOBILE ? 64 : 128;
     // Latitude lines every 15°
     for (let lat = -75; lat <= 75; lat += 15) {
       const phi = (90 - lat) * (Math.PI / 180);
       const pts = [];
-      for (let i = 0; i <= 128; i++) { const t = (i / 128) * Math.PI * 2; pts.push(new THREE.Vector3(gr * Math.sin(phi) * Math.cos(t), gr * Math.cos(phi), gr * Math.sin(phi) * Math.sin(t))); }
+      for (let i = 0; i <= gridSegs; i++) { const t = (i / gridSegs) * Math.PI * 2; pts.push(new THREE.Vector3(gr * Math.sin(phi) * Math.cos(t), gr * Math.cos(phi), gr * Math.sin(phi) * Math.sin(t))); }
       const lineMat = lat === 0 ? gmEquator : (lat % 30 === 0 ? gmMajor : gmMinor);
       gridGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat));
     }
@@ -291,14 +294,14 @@ function GlobePanel({ imgEl }) {
     for (let lon = 0; lon < 360; lon += 15) {
       const t = lon * (Math.PI / 180);
       const pts = [];
-      for (let i = 0; i <= 128; i++) { const p = (i / 128) * Math.PI; pts.push(new THREE.Vector3(gr * Math.sin(p) * Math.cos(t), gr * Math.cos(p), gr * Math.sin(p) * Math.sin(t))); }
+      for (let i = 0; i <= gridSegs; i++) { const p = (i / gridSegs) * Math.PI; pts.push(new THREE.Vector3(gr * Math.sin(p) * Math.cos(t), gr * Math.cos(p), gr * Math.sin(p) * Math.sin(t))); }
       const lineMat = lon === 0 ? gmPrime : (lon % 30 === 0 ? gmMajor : gmMinor);
       gridGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat));
     }
     gridGroup.visible = false; scene.add(gridGroup);
 
-    const starsGeo = new THREE.BufferGeometry(); const sp = [];
-    for (let i = 0; i < 1500; i++) { const r = 50 + Math.random() * 100; const t = Math.random() * Math.PI * 2; const p = Math.acos(2 * Math.random() - 1); sp.push(r * Math.sin(p) * Math.cos(t), r * Math.sin(p) * Math.sin(t), r * Math.cos(p)); }
+    const starsGeo = new THREE.BufferGeometry(); const sp = []; const starCount = IS_MOBILE ? 500 : 1500;
+    for (let i = 0; i < starCount; i++) { const r = 50 + Math.random() * 100; const t = Math.random() * Math.PI * 2; const p = Math.acos(2 * Math.random() - 1); sp.push(r * Math.sin(p) * Math.cos(t), r * Math.sin(p) * Math.sin(t), r * Math.cos(p)); }
     starsGeo.setAttribute("position", new THREE.Float32BufferAttribute(sp, 3));
     scene.add(new THREE.Points(starsGeo, new THREE.PointsMaterial({ color: 0xccbb88, size: 0.15, sizeAttenuation: true })));
 
@@ -347,74 +350,74 @@ function GlobePanel({ imgEl }) {
 
   return (
     <div className="globe-layout">
-      <div className="globe-viewport" ref={mountRef}>
-        <div className="hint-bar">Drag to rotate · Scroll to zoom</div>
+    <div className="globe-viewport" ref={mountRef}>
+    <div className="hint-bar">Drag to rotate · Scroll to zoom</div>
+    </div>
+    <div className="globe-controls">
+    <div className="ctrl-card">
+    <div className="ctrl-label">Pole Projection</div>
+    <div className="section-hint">Push the map away from the poles to add unmapped regions.</div>
+    <div style={{ marginBottom: 10 }}>
+    <div className="sub-label">North Pole Padding</div>
+    <div className="slider-row"><input type="range" min="0" max="40" step="1" value={northPad} onChange={(e) => setNorthPad(Number(e.target.value))} /><span className="slider-val">{northPad}%</span></div>
+    <div className="slider-label-row"><span>None</span><span>More arctic</span></div>
+    </div>
+    <div style={{ marginBottom: 10 }}>
+    <div className="sub-label">South Pole Padding</div>
+    <div className="slider-row"><input type="range" min="0" max="40" step="1" value={southPad} onChange={(e) => setSouthPad(Number(e.target.value))} /><span className="slider-val">{southPad}%</span></div>
+    <div className="slider-label-row"><span>None</span><span>More antarctic</span></div>
+    </div>
+    <div style={{ marginBottom: 10 }}>
+    <div className="sub-label">Horizontal Shift</div>
+    <div className="slider-row"><input type="range" min="-50" max="50" step="1" value={hOffset} onChange={(e) => setHOffset(Number(e.target.value))} /><span className="slider-val">{hOffset > 0 ? '+' : ''}{hOffset}%</span></div>
+    <div className="slider-label-row"><span>← West</span><span>East →</span></div>
+    </div>
+    <div className="color-row">
+    <input type="color" className="color-input" value={poleColor} onChange={(e) => setPoleColor(e.target.value)} />
+    <span className="color-label">Pole fill color</span>
+    </div>
+    </div>
+
+    <div className="ctrl-card">
+    <div className="ctrl-label">Rotation</div>
+    <div className="toggle-row"><span className="toggle-name">Auto-rotate</span><div className={`toggle-switch ${autoRotate ? "on" : ""}`} onClick={() => setAutoRotate(!autoRotate)} /></div>
+    <div className="slider-row" style={{ marginTop: 10 }}><input type="range" min="0.05" max="2" step="0.05" value={rotateSpeed} onChange={(e) => setRotateSpeed(Number(e.target.value))} /><span className="slider-val">{rotateSpeed.toFixed(1)}×</span></div>
+    </div>
+
+    <div className="ctrl-card">
+    <div className="ctrl-label">Axial Tilt</div>
+    <div className="slider-row"><input type="range" min="0" max="45" step="0.5" value={tilt} onChange={(e) => setTilt(Number(e.target.value))} /><span className="slider-val">{tilt.toFixed(1)}°</span></div>
+    </div>
+
+    <div className="ctrl-card">
+    <div className="ctrl-label">Display</div>
+    <div className="toggle-row"><span className="toggle-name">Grid Lines</span><div className={`toggle-switch ${showGrid ? "on" : ""}`} onClick={() => setShowGrid(!showGrid)} /></div>
+    {showGrid && (
+      <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 5 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#8a7e66' }}>
+      <div style={{ width: 18, height: 3, background: '#e8c44a', borderRadius: 1 }} /> Equator
       </div>
-      <div className="globe-controls">
-        <div className="ctrl-card">
-          <div className="ctrl-label">Pole Projection</div>
-          <div className="section-hint">Push the map away from the poles to add unmapped regions.</div>
-          <div style={{ marginBottom: 10 }}>
-            <div className="sub-label">North Pole Padding</div>
-            <div className="slider-row"><input type="range" min="0" max="40" step="1" value={northPad} onChange={(e) => setNorthPad(Number(e.target.value))} /><span className="slider-val">{northPad}%</span></div>
-            <div className="slider-label-row"><span>None</span><span>More arctic</span></div>
-          </div>
-          <div style={{ marginBottom: 10 }}>
-            <div className="sub-label">South Pole Padding</div>
-            <div className="slider-row"><input type="range" min="0" max="40" step="1" value={southPad} onChange={(e) => setSouthPad(Number(e.target.value))} /><span className="slider-val">{southPad}%</span></div>
-            <div className="slider-label-row"><span>None</span><span>More antarctic</span></div>
-          </div>
-          <div style={{ marginBottom: 10 }}>
-            <div className="sub-label">Horizontal Shift</div>
-            <div className="slider-row"><input type="range" min="-50" max="50" step="1" value={hOffset} onChange={(e) => setHOffset(Number(e.target.value))} /><span className="slider-val">{hOffset > 0 ? '+' : ''}{hOffset}%</span></div>
-            <div className="slider-label-row"><span>← West</span><span>East →</span></div>
-          </div>
-          <div className="color-row">
-            <input type="color" className="color-input" value={poleColor} onChange={(e) => setPoleColor(e.target.value)} />
-            <span className="color-label">Pole fill color</span>
-          </div>
-        </div>
-
-        <div className="ctrl-card">
-          <div className="ctrl-label">Rotation</div>
-          <div className="toggle-row"><span className="toggle-name">Auto-rotate</span><div className={`toggle-switch ${autoRotate ? "on" : ""}`} onClick={() => setAutoRotate(!autoRotate)} /></div>
-          <div className="slider-row" style={{ marginTop: 10 }}><input type="range" min="0.05" max="2" step="0.05" value={rotateSpeed} onChange={(e) => setRotateSpeed(Number(e.target.value))} /><span className="slider-val">{rotateSpeed.toFixed(1)}×</span></div>
-        </div>
-
-        <div className="ctrl-card">
-          <div className="ctrl-label">Axial Tilt</div>
-          <div className="slider-row"><input type="range" min="0" max="45" step="0.5" value={tilt} onChange={(e) => setTilt(Number(e.target.value))} /><span className="slider-val">{tilt.toFixed(1)}°</span></div>
-        </div>
-
-        <div className="ctrl-card">
-          <div className="ctrl-label">Display</div>
-          <div className="toggle-row"><span className="toggle-name">Grid Lines</span><div className={`toggle-switch ${showGrid ? "on" : ""}`} onClick={() => setShowGrid(!showGrid)} /></div>
-          {showGrid && (
-            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#8a7e66' }}>
-                <div style={{ width: 18, height: 3, background: '#e8c44a', borderRadius: 1 }} /> Equator
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#8a7e66' }}>
-                <div style={{ width: 18, height: 3, background: '#e85050', borderRadius: 1 }} /> Prime Meridian
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#8a7e66' }}>
-                <div style={{ width: 18, height: 3, background: 'rgba(201,169,78,0.5)', borderRadius: 1 }} /> 30° intervals
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#8a7e66' }}>
-                <div style={{ width: 18, height: 3, background: 'rgba(201,169,78,0.25)', borderRadius: 1 }} /> 15° intervals
-              </div>
-            </div>
-          )}
-          <div className="toggle-row" style={{ marginTop: 8 }}><span className="toggle-name">Atmosphere</span><div className={`toggle-switch ${atmosphere ? "on" : ""}`} onClick={() => setAtmosphere(!atmosphere)} /></div>
-        </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#8a7e66' }}>
+      <div style={{ width: 18, height: 3, background: '#e85050', borderRadius: 1 }} /> Prime Meridian
       </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#8a7e66' }}>
+      <div style={{ width: 18, height: 3, background: 'rgba(201,169,78,0.5)', borderRadius: 1 }} /> 30° intervals
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: '#8a7e66' }}>
+      <div style={{ width: 18, height: 3, background: 'rgba(201,169,78,0.25)', borderRadius: 1 }} /> 15° intervals
+      </div>
+      </div>
+    )}
+    <div className="toggle-row" style={{ marginTop: 8 }}><span className="toggle-name">Atmosphere</span><div className={`toggle-switch ${atmosphere ? "on" : ""}`} onClick={() => setAtmosphere(!atmosphere)} /></div>
+    </div>
+    </div>
     </div>
   );
 }
 
 /* ═══════════════════════════════════════════
-   MAIN APP
-   ═══════════════════════════════════════════ */
+ *  MAIN APP
+ *  ═══════════════════════════════════════════ */
 export default function RealmForge() {
   const [image, setImage] = useState(null);
   const [imageName, setImageName] = useState("");
@@ -428,7 +431,21 @@ export default function RealmForge() {
     setImageName(file.name);
     const url = URL.createObjectURL(file);
     const img = new Image();
-    img.onload = () => { setImgEl(img); setImage(url); };
+    img.onload = () => {
+      if (IS_MOBILE && (img.naturalWidth > 2048 || img.naturalHeight > 2048)) {
+        // Downscale on mobile to prevent OOM
+        const scale = 2048 / Math.max(img.naturalWidth, img.naturalHeight);
+        const c = document.createElement("canvas");
+        c.width = Math.round(img.naturalWidth * scale);
+        c.height = Math.round(img.naturalHeight * scale);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        const scaled = new Image();
+        scaled.onload = () => { setImgEl(scaled); setImage(scaled.src); URL.revokeObjectURL(url); };
+        scaled.src = c.toDataURL("image/jpeg", 0.9);
+      } else {
+        setImgEl(img); setImage(url);
+      }
+    };
     img.src = url;
   };
 
@@ -438,238 +455,238 @@ export default function RealmForge() {
 
   return (
     <>
-      <style>{FONTS}{`
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #0f0e0c; }
+    <style>{FONTS}{`
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      body { background: #0f0e0c; }
 
-        .forge-app {
-          font-family: 'Crimson Text', Georgia, serif;
-          min-height: 100vh;
-          background:
-            radial-gradient(ellipse at 15% 85%, rgba(139,109,60,0.06) 0%, transparent 50%),
-            radial-gradient(ellipse at 85% 15%, rgba(60,90,139,0.05) 0%, transparent 50%),
-            radial-gradient(ellipse at 50% 50%, rgba(20,18,14,1) 0%, #0f0e0c 100%);
+      .forge-app {
+        font-family: 'Crimson Text', Georgia, serif;
+        min-height: 100vh;
+        background:
+        radial-gradient(ellipse at 15% 85%, rgba(139,109,60,0.06) 0%, transparent 50%),
+          radial-gradient(ellipse at 85% 15%, rgba(60,90,139,0.05) 0%, transparent 50%),
+          radial-gradient(ellipse at 50% 50%, rgba(20,18,14,1) 0%, #0f0e0c 100%);
           color: #d4c8a8;
           display: flex;
           flex-direction: column;
-        }
+      }
 
-        /* ── Header ── */
-        .forge-header {
-          text-align: center;
-          padding: 28px 24px 0;
-          position: relative;
-          z-index: 5;
-        }
-        .forge-title {
-          font-family: 'Cinzel', serif;
-          font-size: 32px;
-          font-weight: 900;
-          color: #c9a94e;
-          letter-spacing: 5px;
-          text-transform: uppercase;
-          text-shadow: 0 2px 20px rgba(201,169,78,0.15);
-        }
+      /* ── Header ── */
+      .forge-header {
+        text-align: center;
+        padding: 28px 24px 0;
+        position: relative;
+        z-index: 5;
+      }
+      .forge-title {
+        font-family: 'Cinzel', serif;
+        font-size: 32px;
+        font-weight: 900;
+        color: #c9a94e;
+        letter-spacing: 5px;
+        text-transform: uppercase;
+        text-shadow: 0 2px 20px rgba(201,169,78,0.15);
+      }
 
-        /* ── Map info bar ── */
-        .map-bar {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 16px;
-          padding: 12px 24px;
-          font-size: 13px;
-          color: #8a7e66;
-        }
-        .map-bar-name {
-          font-family: 'Cinzel', serif;
-          letter-spacing: 1px;
-        }
-        .map-bar-clear {
-          font-size: 11px;
-          color: #5a4d36;
-          cursor: pointer;
-          border: 1px solid #3a3328;
-          border-radius: 4px;
-          padding: 3px 10px;
-          transition: all 0.2s;
-          background: none;
-          font-family: 'Cinzel', serif;
-          letter-spacing: 1px;
-          text-transform: uppercase;
-        }
-        .map-bar-clear:hover { border-color: #8a7e66; color: #a89670; }
+      /* ── Map info bar ── */
+      .map-bar {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        padding: 12px 24px;
+        font-size: 13px;
+        color: #8a7e66;
+      }
+      .map-bar-name {
+        font-family: 'Cinzel', serif;
+        letter-spacing: 1px;
+      }
+      .map-bar-clear {
+        font-size: 11px;
+        color: #5a4d36;
+        cursor: pointer;
+        border: 1px solid #3a3328;
+        border-radius: 4px;
+        padding: 3px 10px;
+        transition: all 0.2s;
+        background: none;
+        font-family: 'Cinzel', serif;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+      }
+      .map-bar-clear:hover { border-color: #8a7e66; color: #a89670; }
 
-        /* ── Tabs ── */
-        .tab-bar {
-          display: flex;
-          justify-content: center;
-          gap: 0;
-          padding: 0 24px 16px;
-        }
-        .tab-btn {
-          font-family: 'Cinzel', serif;
-          font-size: 13px;
-          letter-spacing: 2px;
-          text-transform: uppercase;
-          padding: 10px 28px;
-          border: 1px solid #2a2520;
-          background: rgba(20,18,14,0.8);
-          color: #6d6352;
-          cursor: pointer;
-          transition: all 0.3s;
-        }
-        .tab-btn:first-child { border-radius: 8px 0 0 8px; }
-        .tab-btn:last-child { border-radius: 0 8px 8px 0; }
-        .tab-btn.active {
-          background: rgba(201,169,78,0.1);
-          color: #c9a94e;
-          border-color: #c9a94e;
-          z-index: 1;
-        }
-        .tab-btn:hover:not(.active) { color: #a89670; border-color: #3a3328; }
+      /* ── Tabs ── */
+      .tab-bar {
+        display: flex;
+        justify-content: center;
+        gap: 0;
+        padding: 0 24px 16px;
+      }
+      .tab-btn {
+        font-family: 'Cinzel', serif;
+        font-size: 13px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        padding: 10px 28px;
+        border: 1px solid #2a2520;
+        background: rgba(20,18,14,0.8);
+        color: #6d6352;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+      .tab-btn:first-child { border-radius: 8px 0 0 8px; }
+      .tab-btn:last-child { border-radius: 0 8px 8px 0; }
+      .tab-btn.active {
+        background: rgba(201,169,78,0.1);
+        color: #c9a94e;
+        border-color: #c9a94e;
+        z-index: 1;
+      }
+      .tab-btn:hover:not(.active) { color: #a89670; border-color: #3a3328; }
 
-        /* ── Drop zone ── */
-        .drop-zone {
-          margin: 40px auto;
-          width: 420px;
-          max-width: calc(100% - 48px);
-          aspect-ratio: 1;
-          border: 2px dashed #3a3328;
-          border-radius: 50%;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          transition: all 0.4s;
-          background: rgba(30,27,22,0.2);
-        }
-        .drop-zone:hover, .drop-zone.dragover {
-          border-color: #c9a94e;
-          background: rgba(201,169,78,0.04);
-          box-shadow: 0 0 80px rgba(201,169,78,0.06);
-        }
-        .drop-icon { font-size: 64px; opacity: 0.5; }
-        .drop-text { font-family: 'Cinzel', serif; font-size: 18px; color: #a89670; letter-spacing: 3px; margin-top: 16px; text-transform: uppercase; }
-        .drop-hint { font-size: 13px; color: #5a4d36; margin-top: 8px; }
+      /* ── Drop zone ── */
+      .drop-zone {
+        margin: 40px auto;
+        width: 420px;
+        max-width: calc(100% - 48px);
+        aspect-ratio: 1;
+        border: 2px dashed #3a3328;
+        border-radius: 50%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.4s;
+        background: rgba(30,27,22,0.2);
+      }
+      .drop-zone:hover, .drop-zone.dragover {
+        border-color: #c9a94e;
+        background: rgba(201,169,78,0.04);
+        box-shadow: 0 0 80px rgba(201,169,78,0.06);
+      }
+      .drop-icon { font-size: 64px; opacity: 0.5; }
+      .drop-text { font-family: 'Cinzel', serif; font-size: 18px; color: #a89670; letter-spacing: 3px; margin-top: 16px; text-transform: uppercase; }
+      .drop-hint { font-size: 13px; color: #5a4d36; margin-top: 8px; }
 
-        /* ── Shared panel styles ── */
-        .ctrl-card { background: rgba(30,27,22,0.6); border: 1px solid #2a2520; border-radius: 10px; padding: 14px; }
-        .ctrl-label { font-family: 'Cinzel', serif; font-size: 10px; color: #8a7e66; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px; }
-        .sub-label { font-size: 12px; color: #a89670; margin-bottom: 4px; }
-        .section-hint { font-size: 11px; color: #5a4d36; font-style: italic; margin-bottom: 8px; line-height: 1.4; }
-        .slider-row { display: flex; align-items: center; gap: 10px; }
-        .slider-row input[type="range"] { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: #2a2520; outline: none; }
-        .slider-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #c9a94e; border: 2px solid #0c0b09; cursor: pointer; box-shadow: 0 0 6px rgba(201,169,78,0.3); }
-        .slider-val { font-family: 'Cinzel', serif; font-size: 12px; color: #c9a94e; min-width: 36px; text-align: right; }
-        .slider-label-row { display: flex; justify-content: space-between; font-size: 10px; color: #5a4d36; margin-top: 3px; letter-spacing: 0.5px; }
-        .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
-        .toggle-name { font-size: 13px; color: #a89670; }
-        .toggle-switch { width: 38px; height: 20px; border-radius: 10px; border: 1px solid #3a3328; background: #1a1714; position: relative; cursor: pointer; transition: all 0.3s; }
-        .toggle-switch.on { background: rgba(201,169,78,0.2); border-color: #c9a94e; }
-        .toggle-switch::after { content: ''; position: absolute; width: 14px; height: 14px; border-radius: 50%; top: 2px; left: 2px; background: #5a4d36; transition: all 0.3s; }
-        .toggle-switch.on::after { left: 20px; background: #c9a94e; }
-        .color-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
-        .color-input { width: 32px; height: 24px; border: 1px solid #3a3328; border-radius: 4px; background: none; cursor: pointer; padding: 0; }
-        .color-label { font-size: 12px; color: #8a7e66; }
+      /* ── Shared panel styles ── */
+      .ctrl-card { background: rgba(30,27,22,0.6); border: 1px solid #2a2520; border-radius: 10px; padding: 14px; }
+      .ctrl-label { font-family: 'Cinzel', serif; font-size: 10px; color: #8a7e66; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px; }
+      .sub-label { font-size: 12px; color: #a89670; margin-bottom: 4px; }
+      .section-hint { font-size: 11px; color: #5a4d36; font-style: italic; margin-bottom: 8px; line-height: 1.4; }
+      .slider-row { display: flex; align-items: center; gap: 10px; }
+      .slider-row input[type="range"] { flex: 1; -webkit-appearance: none; appearance: none; height: 4px; border-radius: 2px; background: #2a2520; outline: none; }
+      .slider-row input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #c9a94e; border: 2px solid #0c0b09; cursor: pointer; box-shadow: 0 0 6px rgba(201,169,78,0.3); }
+      .slider-val { font-family: 'Cinzel', serif; font-size: 12px; color: #c9a94e; min-width: 36px; text-align: right; }
+      .slider-label-row { display: flex; justify-content: space-between; font-size: 10px; color: #5a4d36; margin-top: 3px; letter-spacing: 0.5px; }
+      .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
+      .toggle-name { font-size: 13px; color: #a89670; }
+      .toggle-switch { width: 38px; height: 20px; border-radius: 10px; border: 1px solid #3a3328; background: #1a1714; position: relative; cursor: pointer; transition: all 0.3s; }
+      .toggle-switch.on { background: rgba(201,169,78,0.2); border-color: #c9a94e; }
+      .toggle-switch::after { content: ''; position: absolute; width: 14px; height: 14px; border-radius: 50%; top: 2px; left: 2px; background: #5a4d36; transition: all 0.3s; }
+      .toggle-switch.on::after { left: 20px; background: #c9a94e; }
+      .color-row { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+      .color-input { width: 32px; height: 24px; border: 1px solid #3a3328; border-radius: 4px; background: none; cursor: pointer; padding: 0; }
+      .color-label { font-size: 12px; color: #8a7e66; }
 
-        /* ── Survey tab ── */
-        .survey-layout { display: flex; gap: 20px; padding: 0 24px 24px; flex: 1; }
-        @media (max-width: 800px) { .survey-layout { flex-direction: column; } }
-        .survey-map-panel { flex: 1; background: rgba(30,27,22,0.5); border: 1px solid #2a2520; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; }
-        .survey-controls { width: 300px; display: flex; flex-direction: column; gap: 14px; }
-        @media (max-width: 800px) { .survey-controls { width: 100%; } }
-        .map-container { position: relative; width: 100%; border-radius: 8px; overflow: hidden; background: #0e0d0b; flex: 1; }
-        .map-container img { display: block; width: 100%; height: auto; }
-        .overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-        .hidden-canvas { display: none; }
-        .analyzing-overlay { position: absolute; inset: 0; background: rgba(15,13,10,0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 8px; z-index: 10; }
-        .spinner { width: 40px; height: 40px; border: 3px solid #3a3328; border-top-color: #c9a94e; border-radius: 50%; animation: spin 1s linear infinite; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .analyzing-text { font-family: 'Cinzel', serif; font-size: 13px; color: #c9a94e; margin-top: 12px; letter-spacing: 2px; text-transform: uppercase; }
-        .pixel-info { position: absolute; bottom: 8px; left: 8px; background: rgba(15,13,10,0.92); border: 1px solid #3a3328; border-radius: 6px; padding: 6px 10px; font-size: 12px; display: flex; align-items: center; gap: 8px; backdrop-filter: blur(6px); }
-        .pixel-swatch { width: 16px; height: 16px; border-radius: 3px; border: 1px solid #5a4d36; }
-        .pixel-type { font-family: 'Cinzel', serif; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
-        .pixel-type.water { color: #5ba4e6; }
-        .pixel-type.land { color: #8bc34a; }
-        .dimension-info { font-size: 11px; color: #5a4d36; margin-top: 8px; text-align: right; }
-        .btn-action { font-family: 'Cinzel', serif; font-size: 14px; letter-spacing: 2px; text-transform: uppercase; padding: 12px 24px; border: 1px solid #c9a94e; background: rgba(201,169,78,0.1); color: #c9a94e; border-radius: 8px; cursor: pointer; transition: all 0.3s; width: 100%; }
-        .btn-action:hover { background: rgba(201,169,78,0.2); box-shadow: 0 0 20px rgba(201,169,78,0.15); }
-        .btn-action:disabled { opacity: 0.4; cursor: not-allowed; }
-        .btn-secondary { font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; padding: 8px 14px; border: 1px solid #5a4d36; background: rgba(30,27,22,0.6); color: #8a7e66; border-radius: 6px; cursor: pointer; transition: all 0.3s; width: 100%; }
-        .btn-secondary:hover { border-color: #8a7e66; color: #a89670; }
-        .legend { display: flex; gap: 16px; justify-content: center; }
-        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #8a7e66; }
-        .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
-        .results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .result-box { background: rgba(15,13,10,0.6); border: 1px solid #2a2520; border-radius: 8px; padding: 12px; text-align: center; }
-        .result-box.full { grid-column: 1 / -1; }
-        .result-value { font-family: 'Cinzel', serif; font-size: 24px; font-weight: 700; line-height: 1; }
-        .result-value.water { color: #5ba4e6; }
-        .result-value.land { color: #8bc34a; }
-        .result-value.ratio { color: #c9a94e; }
-        .result-label-sm { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #6d6352; margin-top: 5px; }
-        .bar-container { height: 26px; border-radius: 6px; overflow: hidden; display: flex; border: 1px solid #2a2520; margin-top: 12px; }
-        .bar-water { background: linear-gradient(180deg, #4a9de0, #2a6aaa); height: 100%; display: flex; align-items: center; justify-content: center; font-family: 'Cinzel', serif; font-size: 11px; color: #fff; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.5); transition: width 0.8s; }
-        .bar-land { background: linear-gradient(180deg, #7ab33a, #4a7a1a); height: 100%; flex: 1; display: flex; align-items: center; justify-content: center; font-family: 'Cinzel', serif; font-size: 11px; color: #fff; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.5); transition: width 0.8s; }
+      /* ── Survey tab ── */
+      .survey-layout { display: flex; gap: 20px; padding: 0 24px 24px; flex: 1; }
+      @media (max-width: 800px) { .survey-layout { flex-direction: column; } }
+      .survey-map-panel { flex: 1; background: rgba(30,27,22,0.5); border: 1px solid #2a2520; border-radius: 12px; padding: 14px; display: flex; flex-direction: column; }
+      .survey-controls { width: 300px; display: flex; flex-direction: column; gap: 14px; }
+      @media (max-width: 800px) { .survey-controls { width: 100%; } }
+      .map-container { position: relative; width: 100%; border-radius: 8px; overflow: hidden; background: #0e0d0b; flex: 1; }
+      .map-container img { display: block; width: 100%; height: auto; }
+      .overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+      .hidden-canvas { display: none; }
+      .analyzing-overlay { position: absolute; inset: 0; background: rgba(15,13,10,0.85); display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 8px; z-index: 10; }
+      .spinner { width: 40px; height: 40px; border: 3px solid #3a3328; border-top-color: #c9a94e; border-radius: 50%; animation: spin 1s linear infinite; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .analyzing-text { font-family: 'Cinzel', serif; font-size: 13px; color: #c9a94e; margin-top: 12px; letter-spacing: 2px; text-transform: uppercase; }
+      .pixel-info { position: absolute; bottom: 8px; left: 8px; background: rgba(15,13,10,0.92); border: 1px solid #3a3328; border-radius: 6px; padding: 6px 10px; font-size: 12px; display: flex; align-items: center; gap: 8px; backdrop-filter: blur(6px); }
+      .pixel-swatch { width: 16px; height: 16px; border-radius: 3px; border: 1px solid #5a4d36; }
+      .pixel-type { font-family: 'Cinzel', serif; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+      .pixel-type.water { color: #5ba4e6; }
+      .pixel-type.land { color: #8bc34a; }
+      .dimension-info { font-size: 11px; color: #5a4d36; margin-top: 8px; text-align: right; }
+      .btn-action { font-family: 'Cinzel', serif; font-size: 14px; letter-spacing: 2px; text-transform: uppercase; padding: 12px 24px; border: 1px solid #c9a94e; background: rgba(201,169,78,0.1); color: #c9a94e; border-radius: 8px; cursor: pointer; transition: all 0.3s; width: 100%; }
+      .btn-action:hover { background: rgba(201,169,78,0.2); box-shadow: 0 0 20px rgba(201,169,78,0.15); }
+      .btn-action:disabled { opacity: 0.4; cursor: not-allowed; }
+      .btn-secondary { font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; padding: 8px 14px; border: 1px solid #5a4d36; background: rgba(30,27,22,0.6); color: #8a7e66; border-radius: 6px; cursor: pointer; transition: all 0.3s; width: 100%; }
+      .btn-secondary:hover { border-color: #8a7e66; color: #a89670; }
+      .legend { display: flex; gap: 16px; justify-content: center; }
+      .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #8a7e66; }
+      .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+      .results-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+      .result-box { background: rgba(15,13,10,0.6); border: 1px solid #2a2520; border-radius: 8px; padding: 12px; text-align: center; }
+      .result-box.full { grid-column: 1 / -1; }
+      .result-value { font-family: 'Cinzel', serif; font-size: 24px; font-weight: 700; line-height: 1; }
+      .result-value.water { color: #5ba4e6; }
+      .result-value.land { color: #8bc34a; }
+      .result-value.ratio { color: #c9a94e; }
+      .result-label-sm { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #6d6352; margin-top: 5px; }
+      .bar-container { height: 26px; border-radius: 6px; overflow: hidden; display: flex; border: 1px solid #2a2520; margin-top: 12px; }
+      .bar-water { background: linear-gradient(180deg, #4a9de0, #2a6aaa); height: 100%; display: flex; align-items: center; justify-content: center; font-family: 'Cinzel', serif; font-size: 11px; color: #fff; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.5); transition: width 0.8s; }
+      .bar-land { background: linear-gradient(180deg, #7ab33a, #4a7a1a); height: 100%; flex: 1; display: flex; align-items: center; justify-content: center; font-family: 'Cinzel', serif; font-size: 11px; color: #fff; letter-spacing: 1px; text-shadow: 0 1px 3px rgba(0,0,0,0.5); transition: width 0.8s; }
 
-        /* ── Globe tab ── */
-        .globe-layout { display: flex; flex: 1; padding: 0 24px 24px; gap: 20px; }
-        @media (max-width: 800px) { .globe-layout { flex-direction: column; } }
-        .globe-viewport { flex: 1; position: relative; min-height: 480px; border-radius: 12px; overflow: hidden; background: rgba(10,9,7,0.5); border: 1px solid #2a2520; }
-        .globe-viewport canvas { display: block; }
-        .globe-controls { width: 280px; display: flex; flex-direction: column; gap: 14px; }
-        @media (max-width: 800px) { .globe-controls { width: 100%; } }
-        .hint-bar { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); background: rgba(12,11,9,0.8); border: 1px solid #2a2520; border-radius: 20px; padding: 6px 18px; font-size: 11px; color: #5a4d36; letter-spacing: 1px; white-space: nowrap; z-index: 3; backdrop-filter: blur(6px); pointer-events: none; }
+      /* ── Globe tab ── */
+      .globe-layout { display: flex; flex: 1; padding: 0 24px 24px; gap: 20px; }
+      @media (max-width: 800px) { .globe-layout { flex-direction: column; } }
+      .globe-viewport { flex: 1; position: relative; min-height: 480px; border-radius: 12px; overflow: hidden; background: rgba(10,9,7,0.5); border: 1px solid #2a2520; }
+      .globe-viewport canvas { display: block; }
+      .globe-controls { width: 280px; display: flex; flex-direction: column; gap: 14px; }
+      @media (max-width: 800px) { .globe-controls { width: 100%; } }
+      .hint-bar { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); background: rgba(12,11,9,0.8); border: 1px solid #2a2520; border-radius: 20px; padding: 6px 18px; font-size: 11px; color: #5a4d36; letter-spacing: 1px; white-space: nowrap; z-index: 3; backdrop-filter: blur(6px); pointer-events: none; }
 
-        /* ── Content area ── */
-        .content-area { flex: 1; display: flex; flex-direction: column; }
+      /* ── Content area ── */
+      .content-area { flex: 1; display: flex; flex-direction: column; }
       `}</style>
 
       <div className="forge-app">
-        <div className="forge-header">
-          <div className="forge-title">Fantasy World Visualizer</div>
+      <div className="forge-header">
+      <div className="forge-title">Realm Forge</div>
 
+      </div>
+
+      {!image ? (
+        <div
+        className={`drop-zone ${dragOver ? "dragover" : ""}`}
+        onClick={() => fileInputRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        >
+        <div className="drop-icon">🗺️</div>
+        <div className="drop-text">Present Your Map</div>
+        <div className="drop-hint">Drop an image or click to browse</div>
+        <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files[0])} />
+        </div>
+      ) : (
+        <>
+        <div className="map-bar">
+        <span>📜</span>
+        <span className="map-bar-name">{imageName}</span>
+        <button className="map-bar-clear" onClick={clearMap}>✕ Clear</button>
         </div>
 
-        {!image ? (
-          <div
-            className={`drop-zone ${dragOver ? "dragover" : ""}`}
-            onClick={() => fileInputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
-          >
-            <div className="drop-icon">🗺️</div>
-            <div className="drop-text">Present Your Map</div>
-            <div className="drop-hint">Drop an image or click to browse</div>
-            <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => handleFile(e.target.files[0])} />
-          </div>
-        ) : (
-          <>
-            <div className="map-bar">
-              <span>📜</span>
-              <span className="map-bar-name">{imageName}</span>
-              <button className="map-bar-clear" onClick={clearMap}>✕ Clear</button>
-            </div>
+        <div className="tab-bar">
+        <button className={`tab-btn ${tab === "survey" ? "active" : ""}`} onClick={() => setTab("survey")}>
+        Survey
+        </button>
+        <button className={`tab-btn ${tab === "globe" ? "active" : ""}`} onClick={() => setTab("globe")}>
+        Globe
+        </button>
+        </div>
 
-            <div className="tab-bar">
-              <button className={`tab-btn ${tab === "survey" ? "active" : ""}`} onClick={() => setTab("survey")}>
-                Survey
-              </button>
-              <button className={`tab-btn ${tab === "globe" ? "active" : ""}`} onClick={() => setTab("globe")}>
-                Globe
-              </button>
-            </div>
-
-            <div className="content-area">
-              {tab === "survey" && <SurveyPanel imgUrl={image} imgEl={imgEl} />}
-              {tab === "globe" && <GlobePanel imgEl={imgEl} />}
-            </div>
-          </>
-        )}
+        <div className="content-area">
+        {tab === "survey" && <SurveyPanel imgUrl={image} imgEl={imgEl} />}
+        {tab === "globe" && <GlobePanel imgEl={imgEl} />}
+        </div>
+        </>
+      )}
       </div>
-    </>
+      </>
   );
 }
