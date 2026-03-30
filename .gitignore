@@ -26,4 +26,20 @@ dist-ssr
 node_modules/
 dist/
 release/
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/app/release/
+android/.idea/
+android/local.properties
+android/*.iml
+android/app/*.iml
+
+# Capacitor auto-generated (gets rebuilt by cap sync)
+android/app/src/main/assets/public/
+
+# OS junk
 .DS_Store
+Thumbs.db
