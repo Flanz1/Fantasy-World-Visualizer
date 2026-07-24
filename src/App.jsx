@@ -6,6 +6,111 @@ const FONTS = `@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght
 const IS_MOBILE = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || window.innerWidth < 768;
 
 /* ═══════════════════════════════════════════
+ *  SURVEYOR GEOMETRY — true spherical area on
+ *  an equirectangular map with pole padding
+ *  ═══════════════════════════════════════════ */
+// padN / padS are % of the FULL sphere height (180°), same semantics as the globe texture builder.
+function latitudeBounds(padN, padS) {
+  return { latTop: 90 - padN * 1.8, latBot: -90 + padS * 1.8 };
+}
+
+// points: array of {u, v} normalized 0..1 in image space → area in km²
+function computeSphericalArea(points, imgW, imgH, padN, padS, radiusKm) {
+  if (!points || points.length < 3) return 0;
+  const { latTop, latBot } = latitudeBounds(padN, padS);
+  const latTopR = (latTop * Math.PI) / 180;
+  const latBotR = (latBot * Math.PI) / 180;
+
+  const Wc = Math.min(2000, Math.max(600, Math.round(imgW)));
+  const Hc = Math.max(2, Math.round((Wc * imgH) / imgW));
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of points) {
+    const x = p.u * Wc, y = p.v * Hc;
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  minX = Math.max(0, Math.floor(minX));
+  minY = Math.max(0, Math.floor(minY));
+  maxX = Math.min(Wc, Math.ceil(maxX));
+  maxY = Math.min(Hc, Math.ceil(maxY));
+  const bw = maxX - minX, bh = maxY - minY;
+  if (bw <= 0 || bh <= 0) return 0;
+
+  const cv = document.createElement("canvas");
+  cv.width = bw; cv.height = bh;
+  const ctx = cv.getContext("2d", { willReadFrequently: true });
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const x = p.u * Wc - minX, y = p.v * Hc - minY;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  });
+  ctx.closePath();
+  ctx.fill();
+
+  const data = ctx.getImageData(0, 0, bw, bh).data;
+  const dLon = (2 * Math.PI) / Wc;
+  const dLat = (latTopR - latBotR) / Hc;
+  const R2 = radiusKm * radiusKm;
+
+  let area = 0;
+  for (let row = 0; row < bh; row++) {
+    const yImg = minY + row + 0.5;
+    const phi = latTopR - (yImg / Hc) * (latTopR - latBotR);
+    const rowWeight = R2 * Math.cos(phi) * dLon * dLat;
+    let count = 0;
+    const base = row * bw * 4;
+    for (let col = 0; col < bw; col++) {
+      if (data[base + col * 4 + 3] > 127) count++;
+    }
+    area += count * rowWeight;
+  }
+  return Math.max(0, area);
+}
+
+const REFERENCES = [
+  { name: "Vatican City", area: 0.49 },
+  { name: "Manhattan", area: 59 },
+  { name: "Luxembourg", area: 2586 },
+  { name: "Slovenia", area: 20273 },
+  { name: "Iceland", area: 103000 },
+  { name: "Great Britain", area: 209331 },
+  { name: "France", area: 551695 },
+  { name: "Texas", area: 695662 },
+  { name: "Greenland", area: 2166086 },
+  { name: "Australia", area: 7692024 },
+  { name: "the Sahara", area: 9200000 },
+  { name: "Russia", area: 17098246 },
+  { name: "the Moon's surface", area: 37930000 },
+  { name: "Earth's land", area: 148940000 },
+  { name: "Earth's surface", area: 510072000 },
+];
+
+function nearestReference(areaKm2) {
+  if (areaKm2 <= 0) return null;
+  let best = null, bestScore = Infinity;
+  for (const ref of REFERENCES) {
+    const ratio = areaKm2 / ref.area;
+    const score = Math.abs(Math.log10(ratio));
+    if (score < bestScore) { bestScore = score; best = { ...ref, ratio }; }
+  }
+  if (!best) return null;
+  const r = best.ratio;
+  const rTxt = r >= 10 ? Math.round(r).toLocaleString() : r >= 0.95 ? r.toFixed(1) : r.toFixed(2);
+  return `≈ ${rTxt}× ${best.name}`;
+}
+
+const KM_PER_MI = 1.609344;
+const fmtNum = (v) => (v >= 100 ? Math.round(v).toLocaleString() : v >= 1 ? v.toFixed(1) : v.toFixed(3));
+const fmtArea = (km2, unit) => `${fmtNum(unit === "mi" ? km2 / (KM_PER_MI * KM_PER_MI) : km2)} ${unit}²`;
+
+const REGION_COLORS = ["#c9a94e", "#a8543a", "#5e8a5e", "#4e7a9c", "#8a5e9c", "#9c8a4e"];
+const ROMAN = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX"];
+
+/* ═══════════════════════════════════════════
  *  WATER / LAND ANALYZER
  *  ═══════════════════════════════════════════ */
 function SurveyPanel({ imgUrl, imgEl }) {
@@ -184,14 +289,12 @@ function SurveyPanel({ imgUrl, imgEl }) {
 /* ═══════════════════════════════════════════
  *  3D GLOBE VIEWER
  *  ═══════════════════════════════════════════ */
-function GlobePanel({ imgEl }) {
+function GlobePanel({ imgEl, northPad, setNorthPad, southPad, setSouthPad }) {
   const [autoRotate, setAutoRotate] = useState(true);
   const [rotateSpeed, setRotateSpeed] = useState(0.3);
   const [showGrid, setShowGrid] = useState(false);
   const [atmosphere, setAtmosphere] = useState(true);
   const [tilt, setTilt] = useState(23.4);
-  const [northPad, setNorthPad] = useState(0);
-  const [southPad, setSouthPad] = useState(0);
   const [hOffset, setHOffset] = useState(0);
   const [poleColor, setPoleColor] = useState("#e8dcc8");
 
@@ -359,12 +462,12 @@ function GlobePanel({ imgEl }) {
     <div className="section-hint">Push the map away from the poles to add unmapped regions.</div>
     <div style={{ marginBottom: 10 }}>
     <div className="sub-label">North Pole Padding</div>
-    <div className="slider-row"><input type="range" min="0" max="40" step="1" value={northPad} onChange={(e) => setNorthPad(Number(e.target.value))} /><span className="slider-val">{northPad}%</span></div>
+    <div className="slider-row"><input type="range" min="0" max="49" step="0.5" value={northPad} onChange={(e) => setNorthPad(Number(e.target.value))} /><span className="slider-val">{northPad}%</span></div>
     <div className="slider-label-row"><span>None</span><span>More arctic</span></div>
     </div>
     <div style={{ marginBottom: 10 }}>
     <div className="sub-label">South Pole Padding</div>
-    <div className="slider-row"><input type="range" min="0" max="40" step="1" value={southPad} onChange={(e) => setSouthPad(Number(e.target.value))} /><span className="slider-val">{southPad}%</span></div>
+    <div className="slider-row"><input type="range" min="0" max="49" step="0.5" value={southPad} onChange={(e) => setSouthPad(Number(e.target.value))} /><span className="slider-val">{southPad}%</span></div>
     <div className="slider-label-row"><span>None</span><span>More antarctic</span></div>
     </div>
     <div style={{ marginBottom: 10 }}>
@@ -416,6 +519,421 @@ function GlobePanel({ imgEl }) {
 }
 
 /* ═══════════════════════════════════════════
+ *  SURVEYOR PANEL
+ *  ═══════════════════════════════════════════ */
+function SurveyorPanel({ imgEl, northPad, setNorthPad, southPad, setSouthPad, circumference, setCircumference, unit, setUnit, regions, setRegions }) {
+  const [mode, setMode] = useState("polygon"); // polygon | freehand | pan
+  const [showGraticule, setShowGraticule] = useState(true);
+  const [draft, setDraft] = useState(null); // { points: [{u,v}] }
+  const [draftArea, setDraftArea] = useState(null);
+  const [cursor, setCursor] = useState(null);
+  const [hoverRegion, setHoverRegion] = useState(null);
+
+  const viewportRef = useRef(null);
+  const canvasRef = useRef(null);
+  const viewRef = useRef({ scale: 1, tx: 0, ty: 0 });
+  const panRef = useRef(null);
+  const drawingRef = useRef(false);
+  const rafRef = useRef(null);
+
+  const imgW = imgEl ? imgEl.naturalWidth : 1;
+  const imgH = imgEl ? imgEl.naturalHeight : 1;
+  const circKm = unit === "mi" ? circumference * KM_PER_MI : circumference;
+  const radiusKm = circKm / (2 * Math.PI);
+  const sphereArea = 4 * Math.PI * radiusKm * radiusKm;
+  const { latTop, latBot } = latitudeBounds(northPad, southPad);
+
+  /* ---------- canvas sizing + view fit ---------- */
+  const fitView = useCallback(() => {
+    const vp = viewportRef.current;
+    if (!vp || !imgEl) return;
+    const vw = vp.clientWidth, vh = vp.clientHeight;
+    const scale = Math.min(vw / imgW, vh / imgH) * 0.94;
+    viewRef.current = { scale, tx: (vw - imgW * scale) / 2, ty: (vh - imgH * scale) / 2 };
+  }, [imgEl, imgW, imgH]);
+
+  const sizeCanvas = useCallback(() => {
+    const vp = viewportRef.current, cv = canvasRef.current;
+    if (!vp || !cv) return;
+    const dpr = window.devicePixelRatio || 1;
+    cv.width = vp.clientWidth * dpr;
+    cv.height = vp.clientHeight * dpr;
+    cv.style.width = vp.clientWidth + "px";
+    cv.style.height = vp.clientHeight + "px";
+  }, []);
+
+  /* ---------- drawing ---------- */
+  const draw = useCallback(() => {
+    const cv = canvasRef.current;
+    if (!cv || !imgEl) return;
+    const ctx = cv.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    const { scale, tx, ty } = viewRef.current;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cv.width / dpr, cv.height / dpr);
+
+    ctx.save();
+    ctx.translate(tx, ty);
+    ctx.scale(scale, scale);
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(imgEl, 0, 0, imgW, imgH);
+
+    if (showGraticule) {
+      ctx.lineWidth = 1 / scale;
+      ctx.strokeStyle = "rgba(201,169,78,0.35)";
+      ctx.fillStyle = "rgba(201,169,78,0.75)";
+      ctx.font = `${11 / scale}px 'Crimson Text', serif`;
+      const span = latTop - latBot;
+      for (let lat = -75; lat <= 75; lat += 15) {
+        if (lat > latTop || lat < latBot) continue;
+        const y = ((latTop - lat) / span) * imgH;
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(imgW, y); ctx.stroke();
+        const label = lat === 0 ? "0° equator" : `${Math.abs(lat)}°${lat > 0 ? "N" : "S"}`;
+        ctx.fillText(label, 5 / scale, y - 3 / scale);
+      }
+      for (let i = 1; i < 12; i++) {
+        const x = (i / 12) * imgW;
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, imgH); ctx.stroke();
+      }
+    }
+
+    for (const reg of regions) {
+      ctx.beginPath();
+      reg.points.forEach((p, i) => {
+        const x = p.u * imgW, y = p.v * imgH;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      const hovered = hoverRegion === reg.id;
+      ctx.fillStyle = reg.color + (hovered ? "55" : "33");
+      ctx.fill();
+      ctx.lineWidth = (hovered ? 2.5 : 1.5) / scale;
+      ctx.strokeStyle = reg.color;
+      ctx.stroke();
+      let cx = 0, cy = 0;
+      reg.points.forEach((p) => { cx += p.u; cy += p.v; });
+      cx = (cx / reg.points.length) * imgW;
+      cy = (cy / reg.points.length) * imgH;
+      ctx.font = `600 ${13 / scale}px 'Cinzel', serif`;
+      const tw = ctx.measureText(reg.name).width;
+      ctx.fillStyle = "rgba(12,11,9,0.75)";
+      ctx.fillRect(cx - tw / 2 - 5 / scale, cy - 9 / scale, tw + 10 / scale, 18 / scale);
+      ctx.fillStyle = reg.color;
+      ctx.textBaseline = "middle";
+      ctx.fillText(reg.name, cx - tw / 2, cy);
+      ctx.textBaseline = "alphabetic";
+    }
+
+    if (draft && draft.points.length > 0) {
+      const col = REGION_COLORS[regions.length % REGION_COLORS.length];
+      ctx.beginPath();
+      draft.points.forEach((p, i) => {
+        const x = p.u * imgW, y = p.v * imgH;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      });
+      if (draft.points.length >= 3) {
+        ctx.save(); ctx.closePath(); ctx.fillStyle = col + "22"; ctx.fill(); ctx.restore();
+      }
+      ctx.lineWidth = 1.5 / scale;
+      ctx.strokeStyle = col;
+      ctx.setLineDash([6 / scale, 4 / scale]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (mode === "polygon") {
+        draft.points.forEach((p, i) => {
+          const x = p.u * imgW, y = p.v * imgH;
+          ctx.beginPath();
+          ctx.arc(x, y, (i === 0 ? 5 : 3.5) / scale, 0, Math.PI * 2);
+          ctx.fillStyle = i === 0 ? "#f0e0b0" : col;
+          ctx.fill();
+          ctx.lineWidth = 1 / scale;
+          ctx.strokeStyle = "#0c0b09";
+          ctx.stroke();
+        });
+      }
+    }
+    ctx.restore();
+  }, [imgEl, imgW, imgH, regions, draft, showGraticule, latTop, latBot, mode, hoverRegion]);
+
+  const requestDraw = useCallback(() => {
+    if (rafRef.current) return;
+    rafRef.current = requestAnimationFrame(() => { rafRef.current = null; draw(); });
+  }, [draw]);
+
+  useEffect(() => {
+    sizeCanvas();
+    fitView();
+    draw();
+    const onResize = () => { sizeCanvas(); draw(); };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [imgEl]); // eslint-disable-line
+
+  useEffect(() => { requestDraw(); }, [draw]); // eslint-disable-line
+
+  /* ---------- recompute areas when planet params change ---------- */
+  useEffect(() => {
+    if (!imgEl) return;
+    setRegions((prev) => prev.map((r) => ({
+      ...r,
+      area: computeSphericalArea(r.points, imgW, imgH, northPad, southPad, radiusKm),
+    })));
+  }, [northPad, southPad, radiusKm, imgEl]); // eslint-disable-line
+
+  /* ---------- coordinate helpers ---------- */
+  const toImage = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const { scale, tx, ty } = viewRef.current;
+    const x = (e.clientX - rect.left - tx) / scale;
+    const y = (e.clientY - rect.top - ty) / scale;
+    return { u: x / imgW, v: y / imgH };
+  };
+  const inBounds = (p) => p.u >= 0 && p.u <= 1 && p.v >= 0 && p.v <= 1;
+  const clampP = (p) => ({ u: Math.min(1, Math.max(0, p.u)), v: Math.min(1, Math.max(0, p.v)) });
+
+  const commitDraft = useCallback((points) => {
+    if (!points || points.length < 3) { setDraft(null); setDraftArea(null); return; }
+    const area = computeSphericalArea(points, imgW, imgH, northPad, southPad, radiusKm);
+    setRegions((prev) => {
+      const id = prev.length ? Math.max(...prev.map((r) => r.id)) + 1 : 1;
+      const color = REGION_COLORS[(id - 1) % REGION_COLORS.length];
+      return [...prev, { id, name: `Region ${ROMAN[(id - 1) % ROMAN.length]}`, points, color, area }];
+    });
+    setDraft(null);
+    setDraftArea(null);
+  }, [imgW, imgH, northPad, southPad, radiusKm, setRegions]);
+
+  /* ---------- pointer events ---------- */
+  const onPointerDown = (e) => {
+    if (!imgEl) return;
+    const cvEl = canvasRef.current;
+    if (e.button === 1 || mode === "pan" || e.shiftKey) {
+      panRef.current = { x: e.clientX, y: e.clientY };
+      cvEl.setPointerCapture(e.pointerId);
+      e.preventDefault();
+      return;
+    }
+    if (e.button !== 0) return;
+    const p = clampP(toImage(e));
+
+    if (mode === "polygon") {
+      const { scale } = viewRef.current;
+      const cur = draft ? draft.points : [];
+      if (cur.length >= 3) {
+        const f = cur[0];
+        const dx = (f.u - p.u) * imgW * scale;
+        const dy = (f.v - p.v) * imgH * scale;
+        if (Math.hypot(dx, dy) < 12) { commitDraft(cur); return; }
+      }
+      const next = [...cur, p];
+      setDraft({ points: next });
+      if (next.length >= 3) {
+        setDraftArea(computeSphericalArea(next, imgW, imgH, northPad, southPad, radiusKm));
+      }
+    } else if (mode === "freehand") {
+      drawingRef.current = true;
+      cvEl.setPointerCapture(e.pointerId);
+      setDraft({ points: [p] });
+      setDraftArea(null);
+    }
+  };
+
+  const onPointerMove = (e) => {
+    if (!imgEl) return;
+    if (panRef.current) {
+      const dx = e.clientX - panRef.current.x;
+      const dy = e.clientY - panRef.current.y;
+      panRef.current = { x: e.clientX, y: e.clientY };
+      viewRef.current.tx += dx;
+      viewRef.current.ty += dy;
+      requestDraw();
+      return;
+    }
+    const p = toImage(e);
+    if (inBounds(p)) {
+      const span = latTop - latBot;
+      setCursor({ lat: latTop - p.v * span, lon: (p.u - 0.5) * 360 });
+    } else setCursor(null);
+
+    if (drawingRef.current && mode === "freehand" && draft) {
+      const cp = clampP(p);
+      const last = draft.points[draft.points.length - 1];
+      const { scale } = viewRef.current;
+      const dx = (cp.u - last.u) * imgW * scale;
+      const dy = (cp.v - last.v) * imgH * scale;
+      if (Math.hypot(dx, dy) > 3) {
+        setDraft((d) => ({ points: [...d.points, cp] }));
+      }
+    }
+  };
+
+  const onPointerUp = () => {
+    if (panRef.current) { panRef.current = null; return; }
+    if (drawingRef.current && mode === "freehand") {
+      drawingRef.current = false;
+      if (draft && draft.points.length >= 3) commitDraft(draft.points);
+      else { setDraft(null); setDraftArea(null); }
+    }
+  };
+
+  const onDoubleClick = () => {
+    if (mode === "polygon" && draft && draft.points.length >= 3) commitDraft(draft.points);
+  };
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") { setDraft(null); setDraftArea(null); drawingRef.current = false; }
+      if (e.key === "Enter" && mode === "polygon" && draft && draft.points.length >= 3) {
+        commitDraft(draft.points);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [draft, mode, commitDraft]);
+
+  // non-passive wheel zoom (re-attached each render to keep closures fresh)
+  useEffect(() => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      const rect = cv.getBoundingClientRect();
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      const v = viewRef.current;
+      const factor = Math.exp(-e.deltaY * 0.0015);
+      const newScale = Math.min(40, Math.max(0.05, v.scale * factor));
+      const k = newScale / v.scale;
+      v.tx = mx - (mx - v.tx) * k;
+      v.ty = my - (my - v.ty) * k;
+      v.scale = newScale;
+      requestDraw();
+    };
+    cv.addEventListener("wheel", onWheel, { passive: false });
+    return () => cv.removeEventListener("wheel", onWheel);
+  });
+
+  const totalArea = regions.reduce((s, r) => s + r.area, 0);
+  const removeRegion = (id) => setRegions((prev) => prev.filter((r) => r.id !== id));
+  const renameRegion = (id, name) => setRegions((prev) => prev.map((r) => (r.id === id ? { ...r, name } : r)));
+  const radiusDisplay = `${Math.round(unit === "mi" ? radiusKm / KM_PER_MI : radiusKm).toLocaleString()} ${unit}`;
+
+  return (
+    <div className="srv-layout">
+      <div className={`srv-viewport mode-${mode}`} ref={viewportRef}>
+        <canvas
+          ref={canvasRef}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onDoubleClick={onDoubleClick}
+          onPointerLeave={() => setCursor(null)}
+        />
+        {cursor && (
+          <div className="srv-coord">
+            {Math.abs(cursor.lat).toFixed(1)}°{cursor.lat >= 0 ? "N" : "S"} · {Math.abs(cursor.lon).toFixed(1)}°{cursor.lon >= 0 ? "E" : "W"}
+          </div>
+        )}
+        {draft && draft.points.length >= 3 && draftArea != null && (
+          <div className="srv-draft">{fmtArea(draftArea, unit)}</div>
+        )}
+        <div className="hint-bar">
+          {mode === "polygon" && !draft && "Click to place markers · scroll to zoom · shift-drag to pan"}
+          {mode === "polygon" && draft && "Click first marker, Enter, or double-click to close · Esc cancels"}
+          {mode === "freehand" && "Drag to trace a border · release to close · Esc cancels"}
+          {mode === "pan" && "Drag to pan · scroll to zoom"}
+        </div>
+      </div>
+
+      <div className="srv-controls">
+        <div className="ctrl-card">
+          <div className="ctrl-label">The Planet</div>
+          <div className="srv-field-row">
+            <input className="srv-num" type="number" min="1" value={circumference}
+              onChange={(e) => setCircumference(Math.max(0, parseFloat(e.target.value) || 0))} />
+            <select className="srv-unit" value={unit} onChange={(e) => setUnit(e.target.value)}>
+              <option value="km">km</option>
+              <option value="mi">mi</option>
+            </select>
+          </div>
+          <div className="section-hint" style={{ marginTop: 8 }}>Equatorial circumference. Earth is 40,075 km / 24,901 mi.</div>
+          <div className="srv-stats">
+            Radius: <b>{radiusDisplay}</b><br />
+            Total surface: <b>{fmtArea(sphereArea, unit)}</b>
+          </div>
+        </div>
+
+        <div className="ctrl-card">
+          <div className="ctrl-label">Pole Projection</div>
+          <div className="section-hint">Shared with the Globe tab — pad the gap if your map stops short of the poles.</div>
+          <div style={{ marginBottom: 10 }}>
+            <div className="sub-label">North Pole Padding</div>
+            <div className="slider-row"><input type="range" min="0" max="49" step="0.5" value={northPad} onChange={(e) => setNorthPad(Number(e.target.value))} /><span className="slider-val">{northPad}%</span></div>
+            <div className="srv-sub">Map's top edge sits at {latTop.toFixed(1)}°</div>
+          </div>
+          <div>
+            <div className="sub-label">South Pole Padding</div>
+            <div className="slider-row"><input type="range" min="0" max="49" step="0.5" value={southPad} onChange={(e) => setSouthPad(Number(e.target.value))} /><span className="slider-val">{southPad}%</span></div>
+            <div className="srv-sub">Map's bottom edge sits at {latBot.toFixed(1)}°</div>
+          </div>
+        </div>
+
+        <div className="ctrl-card">
+          <div className="ctrl-label">Survey Tools</div>
+          <div className="srv-mode-btns">
+            <button className={`srv-mode-btn ${mode === "polygon" ? "active" : ""}`} onClick={() => setMode("polygon")}>Markers</button>
+            <button className={`srv-mode-btn ${mode === "freehand" ? "active" : ""}`} onClick={() => setMode("freehand")}>Freehand</button>
+            <button className={`srv-mode-btn ${mode === "pan" ? "active" : ""}`} onClick={() => setMode("pan")}>Pan</button>
+          </div>
+          <div className="toggle-row" style={{ marginTop: 10 }}>
+            <span className="toggle-name">Latitude graticule</span>
+            <div className={`toggle-switch ${showGraticule ? "on" : ""}`} onClick={() => setShowGraticule(!showGraticule)} />
+          </div>
+        </div>
+
+        <div className="ctrl-card">
+          <div className="ctrl-label">Surveyed Regions</div>
+          {regions.length === 0 && (
+            <div className="section-hint">
+              No regions surveyed yet. Areas account for the projection — a shape near the poles
+              covers far less true ground than the same shape at the equator.
+            </div>
+          )}
+          {regions.map((reg) => (
+            <div key={reg.id} className="srv-region-card"
+              onMouseEnter={() => setHoverRegion(reg.id)}
+              onMouseLeave={() => setHoverRegion(null)}>
+              <div className="srv-region-head">
+                <div className="srv-region-dot" style={{ background: reg.color }} />
+                <input className="srv-region-name" value={reg.name}
+                  onChange={(e) => renameRegion(reg.id, e.target.value)} />
+                <button className="srv-region-del" title="Remove region"
+                  onClick={() => removeRegion(reg.id)}>✕</button>
+              </div>
+              <div className="srv-region-area">{fmtArea(reg.area, unit)}</div>
+              <div className="srv-region-meta">
+                {((reg.area / sphereArea) * 100).toFixed(2)}% of the world · {nearestReference(reg.area)}
+              </div>
+            </div>
+          ))}
+          {regions.length > 0 && (
+            <>
+              <div className="srv-total-card">
+                <div className="srv-total-label">Combined dominion</div>
+                <div className="srv-total-value">{fmtArea(totalArea, unit)}</div>
+                <div className="srv-total-meta">
+                  {((totalArea / sphereArea) * 100).toFixed(2)}% of the planet · {nearestReference(totalArea)}
+                </div>
+              </div>
+              <button className="btn-secondary" style={{ marginTop: 8 }} onClick={() => setRegions([])}>Clear all regions</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
  *  MAIN APP
  *  ═══════════════════════════════════════════ */
 export default function RealmForge() {
@@ -426,9 +944,18 @@ export default function RealmForge() {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
 
+  // shared between Globe and Surveyor tabs
+  const [northPad, setNorthPad] = useState(0);
+  const [southPad, setSouthPad] = useState(0);
+  // surveyor state lives here so it survives tab switches
+  const [circumference, setCircumference] = useState(40075);
+  const [unit, setUnit] = useState("km");
+  const [regions, setRegions] = useState([]);
+
   const handleFile = (file) => {
     if (!file || !file.type.startsWith("image/")) return;
     setImageName(file.name);
+    setRegions([]);
     const url = URL.createObjectURL(file);
     const img = new Image();
     img.onload = () => {
@@ -451,7 +978,7 @@ export default function RealmForge() {
 
   const handleDrop = (e) => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files[0]); };
 
-  const clearMap = () => { setImage(null); setImageName(""); setImgEl(null); setTab("survey"); };
+  const clearMap = () => { setImage(null); setImageName(""); setImgEl(null); setRegions([]); setTab("survey"); };
 
   return (
     <>
@@ -640,6 +1167,43 @@ export default function RealmForge() {
       @media (max-width: 800px) { .globe-controls { width: 100%; } }
       .hint-bar { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); background: rgba(12,11,9,0.8); border: 1px solid #2a2520; border-radius: 20px; padding: 6px 18px; font-size: 11px; color: #5a4d36; letter-spacing: 1px; white-space: nowrap; z-index: 3; backdrop-filter: blur(6px); pointer-events: none; }
 
+      /* ── Surveyor tab ── */
+      .srv-layout { display: flex; flex: 1; padding: 0 24px 24px; gap: 20px; }
+      @media (max-width: 800px) { .srv-layout { flex-direction: column; } }
+      .srv-viewport { flex: 1; position: relative; min-height: 480px; border-radius: 12px; overflow: hidden; border: 1px solid #2a2520; background: repeating-conic-gradient(#14110d 0% 25%, #0f0d0a 0% 50%) 0 0 / 24px 24px; }
+      .srv-viewport canvas { position: absolute; inset: 0; touch-action: none; }
+      .srv-viewport.mode-pan canvas { cursor: grab; }
+      .srv-viewport.mode-polygon canvas, .srv-viewport.mode-freehand canvas { cursor: crosshair; }
+      .srv-controls { width: 300px; display: flex; flex-direction: column; gap: 14px; }
+      @media (max-width: 800px) { .srv-controls { width: 100%; } }
+      .srv-field-row { display: flex; gap: 8px; align-items: center; }
+      .srv-num { flex: 1; background: #1a1714; border: 1px solid #3a3328; color: #d8c690; font-family: 'Crimson Text', serif; font-size: 15px; padding: 7px 10px; border-radius: 6px; outline: none; min-width: 0; }
+      .srv-num:focus { border-color: #c9a94e; }
+      .srv-unit { background: #1a1714; border: 1px solid #3a3328; color: #a89670; font-family: 'Cinzel', serif; font-size: 11px; letter-spacing: 1px; padding: 8px 6px; border-radius: 6px; cursor: pointer; outline: none; }
+      .srv-stats { font-size: 12.5px; color: #6d6352; line-height: 1.6; margin-top: 8px; }
+      .srv-stats b { color: #a89670; font-weight: 600; }
+      .srv-sub { font-size: 11px; color: #5a4d36; margin-top: 2px; font-style: italic; }
+      .srv-mode-btns { display: flex; gap: 6px; }
+      .srv-mode-btn { flex: 1; font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; padding: 9px 4px; border: 1px solid #3a3328; background: rgba(30,27,22,0.6); color: #6d6352; border-radius: 6px; cursor: pointer; transition: all 0.25s; }
+      .srv-mode-btn:hover { border-color: #8a7e66; color: #a89670; }
+      .srv-mode-btn.active { border-color: #c9a94e; background: rgba(201,169,78,0.14); color: #c9a94e; }
+      .srv-coord { position: absolute; top: 12px; right: 14px; background: rgba(12,11,9,0.82); border: 1px solid #2a2520; border-radius: 6px; padding: 5px 12px; font-size: 12px; color: #8a7e66; z-index: 3; backdrop-filter: blur(6px); pointer-events: none; font-variant-numeric: tabular-nums; }
+      .srv-draft { position: absolute; top: 12px; left: 14px; background: rgba(12,11,9,0.85); border: 1px solid rgba(201,169,78,0.4); border-radius: 6px; padding: 6px 14px; font-size: 13px; color: #c9a94e; z-index: 3; backdrop-filter: blur(6px); pointer-events: none; }
+      .srv-region-card { border: 1px solid #2a2520; border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; background: rgba(15,13,10,0.5); transition: border-color 0.2s; }
+      .srv-region-card:hover { border-color: #5a4d36; }
+      .srv-region-head { display: flex; align-items: center; gap: 8px; }
+      .srv-region-dot { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+      .srv-region-name { flex: 1; background: transparent; border: none; border-bottom: 1px solid transparent; color: #d8c690; font-family: 'Cinzel', serif; font-size: 13px; font-weight: 600; letter-spacing: 1px; outline: none; min-width: 0; }
+      .srv-region-name:focus { border-bottom-color: #c9a94e; }
+      .srv-region-del { background: none; border: none; color: #5a4d36; font-size: 16px; cursor: pointer; padding: 0 2px; line-height: 1; transition: color 0.2s; }
+      .srv-region-del:hover { color: #e85050; }
+      .srv-region-area { font-size: 16px; color: #c9a94e; margin-top: 5px; }
+      .srv-region-meta { font-size: 11.5px; color: #6d6352; font-style: italic; }
+      .srv-total-card { border: 1px solid rgba(201,169,78,0.27); border-radius: 8px; padding: 12px 14px; background: rgba(201,169,78,0.06); margin-top: 4px; }
+      .srv-total-label { font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: #8a7e66; }
+      .srv-total-value { font-size: 21px; color: #e8d8a0; margin-top: 3px; font-family: 'Cinzel', serif; }
+      .srv-total-meta { font-size: 12px; color: #8a7e66; font-style: italic; margin-top: 2px; }
+
       /* ── Content area ── */
       .content-area { flex: 1; display: flex; flex-direction: column; }
       `}</style>
@@ -678,11 +1242,15 @@ export default function RealmForge() {
         <button className={`tab-btn ${tab === "globe" ? "active" : ""}`} onClick={() => setTab("globe")}>
         Globe
         </button>
+        <button className={`tab-btn ${tab === "surveyor" ? "active" : ""}`} onClick={() => setTab("surveyor")}>
+        Surveyor
+        </button>
         </div>
 
         <div className="content-area">
         {tab === "survey" && <SurveyPanel imgUrl={image} imgEl={imgEl} />}
-        {tab === "globe" && <GlobePanel imgEl={imgEl} />}
+        {tab === "globe" && <GlobePanel imgEl={imgEl} northPad={northPad} setNorthPad={setNorthPad} southPad={southPad} setSouthPad={setSouthPad} />}
+        {tab === "surveyor" && <SurveyorPanel imgEl={imgEl} northPad={northPad} setNorthPad={setNorthPad} southPad={southPad} setSouthPad={setSouthPad} circumference={circumference} setCircumference={setCircumference} unit={unit} setUnit={setUnit} regions={regions} setRegions={setRegions} />}
         </div>
         </>
       )}
